@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Violation API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        pre { background-color: #f8f9fa; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Violation API Test</h1>
+    <button onclick="runTests()">Run All Tests</button>
+    <div id="results"></div>
+
+    <script>
+        async function runTests() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>Running tests...</p>';
+            
+            const tests = [
+                { name: 'Database Connection Test', url: 'http://192.168.1.4:8080/backend/quick_test.php' },
+                { name: 'API Root Test', url: 'http://192.168.1.4:8080/backend/' },
+                { name: 'Violations API Test', url: 'http://192.168.1.4:8080/backend/violations/220342' },
+                { name: 'Test Connection', url: 'http://192.168.1.4:8080/backend/test_connection.php' }
+            ];
+            
+            let results = '';
+            
+            for (const test of tests) {
+                try {
+                    const response = await fetch(test.url);
+                    const data = await response.json();
+                    
+                    const statusClass = response.ok ? 'success' : 'error';
+                    results += `
+                        <div class="test-result ${statusClass}">
+                            <h3>${test.name}</h3>
+                            <p><strong>Status:</strong> ${response.status} ${response.statusText}</p>
+                            <p><strong>URL:</strong> ${test.url}</p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } catch (error) {
+                    results += `
+                        <div class="test-result error">
+                            <h3>${test.name}</h3>
+                            <p><strong>Error:</strong> ${error.message}</p>
+                            <p><strong>URL:</strong> ${test.url}</p>
+                        </div>
+                    `;
+                }
+            }
+            
+            resultsDiv.innerHTML = results;
+        }
+    </script>
+</body>
+</html>

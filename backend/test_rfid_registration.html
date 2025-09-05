@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RFID Registration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        button { padding: 10px 15px; margin: 5px; }
+        input, select { padding: 8px; margin: 5px; width: 200px; }
+        pre { background-color: #f8f9fa; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>RFID Registration System Test</h1>
+    
+    <div class="test-section">
+        <h2>1. Test RFID Scan Retrieval</h2>
+        <button onclick="testRfidFetch()">Fetch Latest RFID</button>
+        <div id="rfid-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. Simulate RFID Scan Insert</h2>
+        <input type="text" id="rfid-input" placeholder="Enter RFID Number" value="1234567890">
+        <button onclick="simulateRfidScan()">Simulate RFID Scan</button>
+        <div id="simulate-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. Test Registration with RFID</h2>
+        <input type="text" id="student-id" placeholder="Student ID" value="2025001">
+        <input type="text" id="student-name" placeholder="Student Name" value="Test Student">
+        <select id="year">
+            <option>1st Year</option>
+            <option>2nd Year</option>
+            <option>3rd Year</option>
+            <option>4th Year</option>
+        </select>
+        <select id="course">
+            <option>BSCS</option>
+            <option>BSEntrep</option>
+            <option>ICT</option>
+        </select>
+        <select id="section">
+            <option>BS1MA</option>
+            <option>BS2MA</option>
+        </select>
+        <input type="text" id="rfid-reg" placeholder="RFID Number">
+        <br>
+        <button onclick="testRegistration()">Test Registration</button>
+        <div id="registration-result"></div>
+    </div>
+
+    <script>
+        async function testRfidFetch() {
+            const resultDiv = document.getElementById('rfid-result');
+            resultDiv.innerHTML = '<p>Fetching latest RFID...</p>';
+            
+            try {
+                const response = await fetch('http://localhost/backend/rfid/get_latest.php');
+                const data = await response.json();
+                
+                const statusClass = data.success ? 'success' : 'error';
+                resultDiv.innerHTML = `
+                    <div class="${statusClass}">
+                        <h4>RFID Fetch Result</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+                
+                // Auto-fill the registration RFID field if successful
+                if (data.success && data.rfid_number) {
+                    document.getElementById('rfid-reg').value = data.rfid_number;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function simulateRfidScan() {
+            const rfidNumber = document.getElementById('rfid-input').value;
+            const resultDiv = document.getElementById('simulate-result');
+            
+            if (!rfidNumber) {
+                resultDiv.innerHTML = '<div class="error">Please enter an RFID number</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p>Inserting RFID scan...</p>';
+            
+            // This would normally be done by the RFID hardware
+            // For testing, we'll create a simple PHP script to insert test data
+            const testData = {
+                rfid_number: rfidNumber,
+                action: 'insert_test_scan'
+            };
+            
+            try {
+                const response = await fetch('http://localhost/backend/test/rfid_test.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData)
+                });
+                const data = await response.json();
+                
+                const statusClass = data.success ? 'success' : 'error';
+                resultDiv.innerHTML = `
+                    <div class="${statusClass}">
+                        <h4>RFID Scan Simulation Result</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function testRegistration() {
+            const studentId = document.getElementById('student-id').value;
+            const studentName = document.getElementById('student-name').value;
+            const year = document.getElementById('year').value;
+            const course = document.getElementById('course').value;
+            const section = document.getElementById('section').value;
+            const rfid = document.getElementById('rfid-reg').value;
+            const resultDiv = document.getElementById('registration-result');
+            
+            if (!studentId || !studentName || !year || !course || !section) {
+                resultDiv.innerHTML = '<div class="error">Please fill all required fields</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p>Registering student...</p>';
+            
+            const registrationData = {
+                student_id: studentId,
+                name: studentName,
+                password: studentId,
+                year: year,
+                course: course,
+                section: section,
+                rfid: rfid
+            };
+            
+            try {
+                const response = await fetch('http://localhost/backend/auth/register.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(registrationData)
+                });
+                const data = await response.json();
+                
+                const statusClass = data.success ? 'success' : 'error';
+                resultDiv.innerHTML = `
+                    <div class="${statusClass}">
+                        <h4>Registration Result</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

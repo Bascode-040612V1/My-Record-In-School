@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Backend API Test</h1>
+    <div id="results"></div>
+
+    <script>
+        async function testAPI() {
+            const resultsDiv = document.getElementById('results');
+            const baseURL = 'http://localhost:8080/backend';
+            
+            try {
+                // Test 1: Test connection
+                resultsDiv.innerHTML += '<h2>1. Testing Connection</h2>';
+                const testResponse = await fetch(`${baseURL}/test_connection.php`);
+                const testData = await testResponse.text();
+                resultsDiv.innerHTML += `<pre>${testData}</pre>`;
+                
+                // Test 2: Test violations for existing student
+                resultsDiv.innerHTML += '<h2>2. Testing Violations for Student 220342</h2>';
+                const violationsResponse = await fetch(`${baseURL}/violations/220342`);
+                const violationsData = await violationsResponse.text();
+                resultsDiv.innerHTML += `<pre>${violationsData}</pre>`;
+                
+                // Test 3: Test attendance for existing student
+                resultsDiv.innerHTML += '<h2>3. Testing Attendance for Student 220062</h2>';
+                const attendanceResponse = await fetch(`${baseURL}/attendance/220062`);
+                const attendanceData = await attendanceResponse.text();
+                resultsDiv.innerHTML += `<pre>${attendanceData}</pre>`;
+                
+                // Test 4: Test attendance for student from violations DB
+                resultsDiv.innerHTML += '<h2>4. Testing Attendance for Student 220342 (from violations DB)</h2>';
+                const attendance2Response = await fetch(`${baseURL}/attendance/220342`);
+                const attendance2Data = await attendance2Response.text();
+                resultsDiv.innerHTML += `<pre>${attendance2Data}</pre>`;
+                
+                // Test 5: Test login
+                resultsDiv.innerHTML += '<h2>5. Testing Login for Student 220342</h2>';
+                const loginResponse = await fetch(`${baseURL}/auth/login.php`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        student_id: '220342',
+                        password: '220342'
+                    })
+                });
+                const loginData = await loginResponse.text();
+                resultsDiv.innerHTML += `<pre>${loginData}</pre>`;
+                
+            } catch (error) {
+                resultsDiv.innerHTML += `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Run tests when page loads
+        window.onload = testAPI;
+    </script>
+</body>
+</html>

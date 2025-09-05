@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RFID Backend Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        button { padding: 10px 15px; margin: 5px; }
+        pre { background-color: #f8f9fa; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>RFID Backend Connection Test</h1>
+    
+    <div class="test-section">
+        <h2>1. Test Backend Root</h2>
+        <button onclick="testBackendRoot()">Test Backend Root</button>
+        <div id="root-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. Test RFID Endpoint</h2>
+        <button onclick="testRfidEndpoint()">Test RFID Endpoint</button>
+        <div id="rfid-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. Test Database Connection</h2>
+        <button onclick="testDbConnection()">Test Database Connection</button>
+        <div id="db-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. Insert Test RFID Scan</h2>
+        <button onclick="insertTestScan()">Insert Test RFID Scan</button>
+        <div id="insert-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>5. Test Direct RFID File</h2>
+        <button onclick="testDirectRfidFile()">Test Direct RFID File</button>
+        <div id="direct-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>6. Check Response Headers</h2>
+        <button onclick="checkResponseHeaders()">Check RFID Response Headers</button>
+        <div id="headers-result"></div>
+    </div>
+
+    <script>
+        async function testBackendRoot() {
+            const resultDiv = document.getElementById('root-result');
+            resultDiv.innerHTML = '<p>Testing backend root...</p>';
+            
+            try {
+                const response = await fetch('http://localhost/backend/');
+                const data = await response.json();
+                
+                const statusClass = response.ok ? 'success' : 'error';
+                resultDiv.innerHTML = `
+                    <div class="${statusClass}">
+                        <h4>Backend Root Test - Status: ${response.status}</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function testRfidEndpoint() {
+            const resultDiv = document.getElementById('rfid-result');
+            resultDiv.innerHTML = '<p>Testing RFID endpoint...</p>';
+            
+            try {
+                const response = await fetch('http://localhost/backend/rfid/get_latest.php');
+                const data = await response.json();
+                
+                const statusClass = response.ok ? 'success' : 'error';
+                resultDiv.innerHTML = `
+                    <div class="${statusClass}">
+                        <h4>RFID Endpoint Test - Status: ${response.status}</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function testDbConnection() {
+            const resultDiv = document.getElementById('db-result');
+            resultDiv.innerHTML = '<p>Testing database connection...</p>';
+            
+            try {
+                const response = await fetch('http://localhost/backend/test_connection.php');
+                const data = await response.json();
+                
+                const statusClass = response.ok ? 'success' : 'error';
+                resultDiv.innerHTML = `
+                    <div class="${statusClass}">
+                        <h4>Database Connection Test - Status: ${response.status}</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function insertTestScan() {
+            const resultDiv = document.getElementById('insert-result');
+            resultDiv.innerHTML = '<p>Inserting test RFID scan...</p>';
+            
+            try {
+                const response = await fetch('http://localhost/backend/test/rfid_test.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        rfid_number: '1234567890',
+                        action: 'insert_test_scan'
+                    })
+                });
+                const data = await response.json();
+                
+                const statusClass = response.ok ? 'success' : 'error';
+                resultDiv.innerHTML = `
+                    <div class="${statusClass}">
+                        <h4>Test RFID Insert - Status: ${response.status}</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function testDirectRfidFile() {
+            const resultDiv = document.getElementById('direct-result');
+            resultDiv.innerHTML = '<p>Testing direct RFID file...</p>';
+            
+            try {
+                const response = await fetch('http://localhost/backend/direct_rfid_test.php');
+                const text = await response.text();
+                
+                const statusClass = response.ok ? 'success' : 'error';
+                resultDiv.innerHTML = `
+                    <div class="${statusClass}">
+                        <h4>Direct RFID File Test - Status: ${response.status}</h4>
+                        <pre>${text}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function checkResponseHeaders() {
+            const resultDiv = document.getElementById('headers-result');
+            resultDiv.innerHTML = '<p>Checking response headers...</p>';
+            
+            try {
+                const response = await fetch('http://localhost/backend/rfid/get_latest.php', { method: 'GET' });
+                
+                let headersText = '';
+                for (let [key, value] of response.headers.entries()) {
+                    headersText += `${key}: ${value}\n`;
+                }
+                
+                const statusClass = response.ok ? 'success' : 'error';
+                resultDiv.innerHTML = `
+                    <div class="${statusClass}">
+                        <h4>Response Headers - Status: ${response.status}</h4>
+                        <pre>${headersText}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Error</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
