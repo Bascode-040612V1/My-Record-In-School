@@ -7,15 +7,24 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.yourapp.test.myrecordinschool.data.api.RetrofitClient
 import com.yourapp.test.myrecordinschool.data.model.*
+import com.yourapp.test.myrecordinschool.data.sync.SyncManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import com.yourapp.test.myrecordinschool.data.preferences.AppPreferences
 import kotlinx.coroutines.launch
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
     
     private val appPreferences = AppPreferences(application)
+    private val syncManager = SyncManager(application)
     
     private val _authState = MutableLiveData<AuthState>()
     val authState: LiveData<AuthState> = _authState
+    
+    // Enhanced state management
+    private val _authDataState = MutableStateFlow<DataState<Student>>(DataState.Loading)
+    val authDataState: StateFlow<DataState<Student>> = _authDataState.asStateFlow()
     
     private val _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> = _isLoading
@@ -29,15 +38,25 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val _registrationSuccess = MutableLiveData<Boolean>()
     val registrationSuccess: LiveData<Boolean> = _registrationSuccess
     
+    // Network state
+    val networkState: StateFlow<NetworkState> = syncManager.networkState
+    
     init {
         checkLoginStatus()
     }
     
     private fun checkLoginStatus() {
         if (appPreferences.isLoggedIn()) {
-            _authState.value = AuthState.Authenticated(appPreferences.getStudent())
+            val student = appPreferences.getStudent()
+            _authState.value = AuthState.Authenticated(student)
+            _authDataState.value = if (student != null) {
+                DataState.Success(student)
+            } else {
+                DataState.Error("Student data not found")
+            }
         } else {
             _authState.value = AuthState.Unauthenticated
+            _authDataState.value = DataState.Loading
         }
     }
     
@@ -45,6 +64,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = ""
+            _authDataState.value = DataState.Loading
+            
             try {
                 val config = appPreferences.getAppConfig()
                 val api = RetrofitClient.getStudentApi(config.baseUrl)
@@ -56,26 +77,39 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         appPreferences.saveStudent(student)
                         appPreferences.setLoggedIn(true)
                         _authState.value = AuthState.Authenticated(student)
-                        _errorMessage.value = "Login successful! Welcome ${student.name}"
+                        _authDataState.value = DataState.Success(student)
+                        _successMessage.value = "Login successful! Welcome ${student.name}"
+                        
+                        // Update sync manager network state
+                        syncManager.updateNetworkState(true)
                     } else {
-                        _errorMessage.value = "Invalid student data received"
+                        val errorMsg = "Invalid student data received"
+                        _errorMessage.value = errorMsg
+                        _authDataState.value = DataState.Error(errorMsg)
                     }
                 } else {
                     val errorMsg = response.body()?.message ?: "Login failed"
-                    _errorMessage.value = if (errorMsg.contains("Invalid", ignoreCase = true)) {
+                    val finalErrorMsg = if (errorMsg.contains("Invalid", ignoreCase = true)) {
                         "Student not found or incorrect credentials"
                     } else {
                         errorMsg
                     }
+                    _errorMessage.value = finalErrorMsg
+                    _authDataState.value = DataState.Error(finalErrorMsg)
                 }
             } catch (e: Exception) {
-                _errorMessage.value = when {
+                val errorMsg = when {
                     e.message?.contains("Unable to resolve host", ignoreCase = true) == true -> 
                         "Cannot connect to server. Please check your internet connection and server settings."
                     e.message?.contains("timeout", ignoreCase = true) == true -> 
                         "Connection timeout. Please try again."
                     else -> "Network error: ${e.message}"
                 }
+                _errorMessage.value = errorMsg
+                _authDataState.value = DataState.Error(errorMsg)
+                
+                // Update sync manager network state
+                syncManager.updateNetworkState(false)
             } finally {
                 _isLoading.value = false
             }
@@ -126,6 +160,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun logout() {
         appPreferences.logout()
         _authState.value = AuthState.Unauthenticated
+        _authDataState.value = DataState.Loading
+        syncManager.stopPeriodicSync()
     }
     
     fun updateStudentInfo(year: String, course: String, section: String) {
@@ -165,6 +201,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     
     fun clearRegistrationSuccess() {
         _registrationSuccess.value = false
+    }
+    
+    fun retryLogin(studentId: String, password: String) {
+        clearError()
+        login(studentId, password)
+    }
+    
+    fun updateNetworkState(isAvailable: Boolean) {
+        syncManager.updateNetworkState(isAvailable)
     }
 }
 

@@ -19,8 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yourapp.test.myrecordinschool.roomdb.entity.ViolationEntity
 import com.yourapp.test.myrecordinschool.data.model.Violation
+import com.yourapp.test.myrecordinschool.data.model.*
 import com.yourapp.test.myrecordinschool.ui.theme.*
-import com.yourapp.test.myrecordinschool.ui.components.AttendanceCalendar
+import com.yourapp.test.myrecordinschool.ui.components.*
 import com.yourapp.test.myrecordinschool.viewmodel.AttendanceViewModel
 import com.yourapp.test.myrecordinschool.viewmodel.ViolationViewModel
 import java.text.SimpleDateFormat
@@ -37,6 +38,11 @@ fun HomeScreen(
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("My Violations", "My Attendance")
     
+    // Sync status for both ViewModels
+    val violationSyncStatus by violationViewModel.syncStatus.collectAsState()
+    val attendanceSyncStatus by attendanceViewModel.syncStatus.collectAsState()
+    val violationNetworkState by violationViewModel.networkState.collectAsState()
+    
     LaunchedEffect(Unit) {
         violationViewModel.loadViolations()
         attendanceViewModel.loadAttendance()
@@ -45,16 +51,44 @@ fun HomeScreen(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Top App Bar
+        // Top App Bar with Sync Status
         TopAppBar(
             title = {
-                Text(
-                    text = "My Record in School",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+                Column {
+                    Text(
+                        text = "My Record in School",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    
+                    // Show network status
+                    if (violationNetworkState == NetworkState.Unavailable) {
+                        Text(
+                            text = "Offline Mode",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                        )
+                    }
+                }
             },
             actions = {
+                // Refresh button
+                IconButton(
+                    onClick = {
+                        if (selectedTab == 0) {
+                            violationViewModel.refreshViolations()
+                        } else {
+                            attendanceViewModel.refreshAttendance()
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+                
                 IconButton(onClick = onNavigateToSettings) {
                     Icon(
                         imageVector = Icons.Filled.Settings,
@@ -113,15 +147,13 @@ private fun ViolationsTab(
     violationViewModel: ViolationViewModel,
     onNavigateToDetail: (Violation) -> Unit
 ) {
-    val violationsFromDb by violationViewModel.violationsFromDb.observeAsState(emptyList<ViolationEntity>())
-    val violationsToDisplay: List<ViolationEntity> = violationsFromDb
-
-
+    val violationsFromDb by violationViewModel.violationsFromDb.observeAsState(emptyList())
+    val violationDataState by violationViewModel.violationDataState.collectAsState()
     val isLoading by violationViewModel.isLoading.observeAsState(false)
     val errorMessage by violationViewModel.errorMessage.observeAsState("")
     
     Column {
-        // Header with Refresh Button
+        // Header with Info
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -154,7 +186,7 @@ private fun ViolationsTab(
                 IconButton(
                     onClick = { 
                         violationViewModel.clearError()
-                        violationViewModel.loadViolations() 
+                        violationViewModel.refreshViolations()
                     }
                 ) {
                     Icon(
@@ -168,174 +200,48 @@ private fun ViolationsTab(
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // Content
+        // Show data from Room database (offline-first)
         when {
             isLoading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
+                LoadingIndicator(
+                    isLoading = true,
+                    message = "Loading violations..."
+                )
+            }
+            
+            violationsFromDb.isEmpty() && errorMessage.isEmpty() -> {
+                EmptyStateCard(
+                    message = "Great job! You have no violations on record.",
+                    icon = Icons.Default.CheckCircle
+                )
             }
             
             errorMessage.isNotEmpty() -> {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Error,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Text(
-                                text = errorMessage,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        
-                        // Action buttons
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = { 
-                                    violationViewModel.clearError()
-                                    violationViewModel.loadViolations() 
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Retry")
-                            }
-                            
-                            OutlinedButton(
-                                onClick = { 
-                                    violationViewModel.debugAppState()
-                                    violationViewModel.testConnectivity()
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.BugReport,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Debug")
-                            }
-                        }
-                    }
-                }
-            }
-            
-           violationsToDisplay.isEmpty() -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = Green
-                        )
-                        Text(
-                            text = "No Violations",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Great job! You have no violations on record.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                ErrorCard(
+                    message = errorMessage,
+                    onRetry = { violationViewModel.retryOperation() }
+                )
             }
             
             else -> {
-                // Debug: Log that we're rendering violations
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(violationsToDisplay) { violation ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text("ID: ${violation.id}", fontWeight = FontWeight.Bold)
-                                Text("Violation: ${violation.violation_description}")
-                                Text("Recorded by: ${violation.recorded_by}")
-                            }
-                        }
-                    }
-                }
-
-
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(violationsToDisplay) { violation ->
-                        when (violation) {
-                            is Violation -> {
-                                ViolationCard(
-                                    violation = violation,
-                                    onClick = {
-                                        android.util.Log.d("HomeScreen", "Violation card clicked: ${violation.id}")
-                                        onNavigateToDetail(violation)
-                                    }
-                                )
-                            }
-                            is ViolationEntity -> {
-                                // For offline violations, show a simple card or text
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                                ) {
-                                    Column(modifier = Modifier.padding(16.dp)) {
-                                        Text("ID: ${violation.id}", fontWeight = FontWeight.Bold)
-                                        Text("Violation: ${violation.violation_description}")
-                                        Text("Recorded by: ${violation.recorded_by}")
-                                    }
+                    items(violationsFromDb) { violationEntity ->
+                        ViolationEntityCard(
+                            violationEntity = violationEntity,
+                            onClick = {
+                                // Hidden acknowledge functionality - auto-acknowledge on view
+                                if (violationEntity.acknowledged == 0) {
+                                    violationViewModel.acknowledgeViolation(violationEntity.id)
                                 }
+                                val violation = violationViewModel.convertToViolation(violationEntity)
+                                onNavigateToDetail(violation)
                             }
-                        }
+                        )
                     }
                 }
-
             }
         }
     }
@@ -343,11 +249,11 @@ private fun ViolationsTab(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ViolationCard(
-    violation: Violation,
+private fun ViolationEntityCard(
+    violationEntity: ViolationEntity,
     onClick: () -> Unit
 ) {
-    val offenseColor = when (violation.offense_count) {
+    val offenseColor = when (violationEntity.offense_count) {
         1 -> Green
         2 -> Orange
         else -> Red
@@ -355,15 +261,10 @@ private fun ViolationCard(
     
     val dateFormat = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
     val formattedDate = try {
-        val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(violation.date_recorded)
+        val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(violationEntity.date_recorded)
         dateFormat.format(date ?: Date())
     } catch (e: Exception) {
-        violation.date_recorded
-    }
-    
-    // Debug logging
-    LaunchedEffect(violation) {
-        android.util.Log.d("ViolationCard", "Rendering violation card for ID: ${violation.id}, Description: ${violation.violation_description}")
+        violationEntity.date_recorded
     }
     
     Card(
@@ -372,14 +273,14 @@ private fun ViolationCard(
             .fillMaxWidth()
             .wrapContentHeight(),
         colors = CardDefaults.cardColors(
-            containerColor = if (violation.acknowledged == 1) {
+            containerColor = if (violationEntity.acknowledged == 1) {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             } else {
                 MaterialTheme.colorScheme.surface
             }
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (violation.acknowledged == 1) 2.dp else 6.dp
+            defaultElevation = if (violationEntity.acknowledged == 1) 2.dp else 6.dp
         ),
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(
@@ -422,7 +323,7 @@ private fun ViolationCard(
                             tint = offenseColor
                         )
                         Text(
-                            text = "${violation.offense_count}${getOrdinalSuffix(violation.offense_count)} Offense",
+                            text = "${violationEntity.offense_count}${getOrdinalSuffix(violationEntity.offense_count)} Offense",
                             style = MaterialTheme.typography.labelMedium,
                             color = offenseColor,
                             fontWeight = FontWeight.Bold
@@ -432,14 +333,14 @@ private fun ViolationCard(
             }
             
             Text(
-                text = "Warning: ${violation.penalty}",
+                text = "Warning: ${violationEntity.penalty}",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             
             Text(
-                text = "Violation: ${violation.violation_description}",
+                text = "Violation: ${violationEntity.violation_description}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
@@ -447,7 +348,7 @@ private fun ViolationCard(
             )
             
             Text(
-                text = "Recorded by: ${violation.recorded_by}",
+                text = "Recorded by: ${violationEntity.recorded_by}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -457,36 +358,23 @@ private fun ViolationCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (violation.acknowledged == 1) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = Green
-                        )
-                        Text(
-                            text = "Acknowledged",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Green,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                } else {
-                    Button(
-                        onClick = onClick,
-                        modifier = Modifier.height(32.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp)
-                    ) {
-                        Text(
-                            text = "Click to View Details",
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
+                // Always show View Details button
+                Button(
+                    onClick = onClick,
+                    modifier = Modifier.height(32.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Visibility,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "View Details",
+                        style = MaterialTheme.typography.labelMedium
+                    )
                 }
                 
                 Card(
@@ -496,7 +384,7 @@ private fun ViolationCard(
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text(
-                        text = violation.category.replace("_", " "),
+                        text = violationEntity.category.replace("_", " "),
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
@@ -522,5 +410,27 @@ private fun getOrdinalSuffix(number: Int): String {
 private fun AttendanceTab(
     attendanceViewModel: AttendanceViewModel
 ) {
-    AttendanceCalendar(attendanceViewModel = attendanceViewModel)
+    val attendanceDataState by attendanceViewModel.attendanceDataState.collectAsState()
+    val isLoading by attendanceViewModel.isLoading.observeAsState(false)
+    val errorMessage by attendanceViewModel.errorMessage.observeAsState("")
+    
+    when {
+        isLoading -> {
+            LoadingIndicator(
+                isLoading = true,
+                message = "Loading attendance..."
+            )
+        }
+        
+        errorMessage.isNotEmpty() -> {
+            ErrorCard(
+                message = errorMessage,
+                onRetry = { attendanceViewModel.retryOperation() }
+            )
+        }
+        
+        else -> {
+            AttendanceCalendar(attendanceViewModel = attendanceViewModel)
+        }
+    }
 }

@@ -16,12 +16,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.yourapp.test.myrecordinschool.data.model.AttendanceCalendarDay
-import com.yourapp.test.myrecordinschool.data.model.AttendanceMonth
+import com.yourapp.test.myrecordinschool.data.model.*
+import com.yourapp.test.myrecordinschool.data.preferences.AppPreferences
 import com.yourapp.test.myrecordinschool.ui.theme.*
 import com.yourapp.test.myrecordinschool.viewmodel.AttendanceViewModel
 import java.text.SimpleDateFormat
@@ -37,9 +38,25 @@ fun AttendanceCalendar(
     val selectedMonth by attendanceViewModel.selectedMonth.observeAsState(1)
     val selectedYear by attendanceViewModel.selectedYear.observeAsState(2024)
     
-    val attendanceStats by attendanceViewModel.attendance.observeAsState(emptyList())
-    val stats = remember(attendanceStats) {
-        attendanceStats.groupingBy { it.status }.eachCount()
+    // Use offline data from Room database
+    val attendanceFromDb by attendanceViewModel.attendanceFromDb.observeAsState(emptyList())
+    val attendanceDataState by attendanceViewModel.attendanceDataState.collectAsState()
+    val networkState by attendanceViewModel.networkState.collectAsState()
+    
+    // Get student information from AppPreferences
+    val context = LocalContext.current
+    val appPreferences = remember { AppPreferences(context) }
+    val student = remember { appPreferences.getStudent() }
+    
+    val stats = remember(attendanceFromDb) {
+        attendanceFromDb.groupingBy { it.status }.eachCount()
+    }
+    
+    // Generate calendar from offline data when available
+    LaunchedEffect(attendanceFromDb, selectedMonth, selectedYear) {
+        if (attendanceFromDb.isNotEmpty()) {
+            attendanceViewModel.generateCalendarFromOfflineData(selectedMonth, selectedYear)
+        }
     }
     
     Column(
@@ -63,12 +80,32 @@ fun AttendanceCalendar(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "My Attendance",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Column {
+                        Text(
+                            text = "My Attendance",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        // Display student information from AppPreferences
+                        student?.let {
+                            Text(
+                                text = "${it.name} • ${it.course} ${it.section}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        
+                        // Show offline indicator if needed
+                        if (networkState == NetworkState.Unavailable) {
+                            Text(
+                                text = "Offline Mode",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -100,10 +137,23 @@ fun AttendanceCalendar(
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
+                        
+                        // Debug button to populate sample data when offline
+                        if (networkState == NetworkState.Unavailable && attendanceFromDb.isEmpty()) {
+                            IconButton(
+                                onClick = { attendanceViewModel.populateSampleOfflineData() }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = "Add Sample Data",
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
                     }
                 }
                 
-                // Attendance Statistics
+                // Attendance Statistics from offline data
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -181,30 +231,68 @@ fun AttendanceCalendar(
             }
         }
         
-        // Legend
-        Card(
+        // Legend and Student Stats
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            ),
-            shape = RoundedCornerShape(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            // Legend Card
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text(
-                    text = "Legend",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    LegendItem("Present", Green)
-                    LegendItem("Absent", Red)
-                    LegendItem("Late", Orange)
+                    Text(
+                        text = "Legend",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        LegendItem("Present", Green)
+                        LegendItem("Absent", Red)
+                        LegendItem("Late", Orange)
+                    }
+                }
+            }
+            
+            // Student Info Card (if available)
+            student?.let {
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Student Info",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "ID: ${it.student_id}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Year: ${it.year}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -300,9 +388,9 @@ private fun CalendarDayItem(
 ) {
     val backgroundColor = when {
         !day.isCurrentMonth -> Color.Transparent
-        day.attendance?.status == "PRESENT" -> Green.copy(alpha = 0.2f)
-        day.attendance?.status == "ABSENT" -> Red.copy(alpha = 0.2f)
-        day.attendance?.status == "LATE" -> Orange.copy(alpha = 0.2f)
+        day.attendance?.status == "PRESENT" -> Green.copy(alpha = 0.7f) // More prominent green
+        day.attendance?.status == "ABSENT" -> Red.copy(alpha = 0.3f)
+        day.attendance?.status == "LATE" -> Orange.copy(alpha = 0.3f)
         else -> Color.Transparent
     }
     
@@ -310,12 +398,18 @@ private fun CalendarDayItem(
         !day.isCurrentMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
         day.isToday -> MaterialTheme.colorScheme.primary
         day.attendance != null -> when (day.attendance.status) {
-            "PRESENT" -> Green
+            "PRESENT" -> Color.White // White text on green background for better contrast
             "ABSENT" -> Red
             "LATE" -> Orange
             else -> MaterialTheme.colorScheme.onSurface
         }
         else -> MaterialTheme.colorScheme.onSurface
+    }
+    
+    val borderColor = when {
+        day.isToday -> MaterialTheme.colorScheme.primary
+        day.attendance?.status == "PRESENT" -> Green
+        else -> Color.Transparent
     }
     
     Box(
@@ -339,7 +433,11 @@ private fun CalendarDayItem(
             text = day.day.toString(),
             style = MaterialTheme.typography.bodyMedium,
             color = textColor,
-            fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.Normal
+            fontWeight = when {
+                day.isToday -> FontWeight.Bold
+                day.attendance?.status == "PRESENT" -> FontWeight.SemiBold // Bold text for present days
+                else -> FontWeight.Normal
+            }
         )
     }
 }

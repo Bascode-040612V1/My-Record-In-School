@@ -1,6 +1,6 @@
 # My Record in School App
 
-A modern Android application built with Jetpack Compose that allows students to track their school violations and attendance records.
+A modern Android application built with Jetpack Compose that allows students to track their school violations and attendance records with full offline functionality.
 
 ## Features
 
@@ -8,13 +8,16 @@ A modern Android application built with Jetpack Compose that allows students to 
 - **Login/Register System**: Students can register with their complete name, student number, year, course, and section
 - **Secure Login**: Uses student number as both username and password
 - **Modern UI**: Beautiful blue-themed interface with smooth animations
+- **Offline Support**: Login data cached locally for offline access
 
 ### 📱 Main Features
 
 #### 🚨 Violation Tracking
 - View violation history with detailed information
 - Color-coded offense indicators (Green: 1st offense, Orange: 2nd offense, Red: 3rd+ offense)
-- Acknowledge violations by viewing details
+- **Hidden Acknowledge System**: Violations are automatically acknowledged when viewing details (transparent to students)
+- **Offline-First**: View violations even without internet connection
+- Real-time sync status and background synchronization
 - Categorized violations:
   - **Dress Code Violations**: No ID, improper uniform, etc.
   - **Conduct Violations**: Cutting classes, cheating, etc.
@@ -25,12 +28,14 @@ A modern Android application built with Jetpack Compose that allows students to 
 - Interactive calendar view showing attendance status
 - Color-coded days (Green: Present, Red: Absent, Orange: Late)
 - Monthly navigation with attendance statistics
-- Visual attendance tracking
+- **Offline Calendar**: Works without internet with cached data
+- Visual attendance tracking with real-time updates
 
 #### ⚙️ Settings & Configuration
 - **Settings01**: IP and port configuration for XAMPP server
 - **Settings02**: Student profile management and information updates
 - Database connection testing
+- Network status monitoring
 - Logout functionality
 
 ### 🎨 Design Features
@@ -39,9 +44,16 @@ A modern Android application built with Jetpack Compose that allows students to 
 - **Material Design 3**: Latest Material Design guidelines
 - **Responsive UI**: Adapts to different screen sizes
 - **Smooth Animations**: Engaging user experience
+- **Loading States**: Professional loading indicators and error handling
+- **Sync Status Indicators**: Real-time sync and network status display
 
-### 🌐 Backend Integration
-- **Retrofit2**: REST API communication
+### 🌐 Backend Integration & Offline Support
+- **Offline-First Architecture**: App works completely without internet
+- **Room Database**: Complete local data storage with SQLite
+- **Retrofit2**: REST API communication with automatic retry
+- **Background Sync**: Automatic synchronization every 5 minutes
+- **Conflict Resolution**: Smart data merging and error recovery
+- **Network State Detection**: Automatic online/offline mode switching
 - **Coroutines**: Asynchronous data operations
 - **XAMPP Integration**: Connects to local XAMPP server
 - **Dual Database Support**: 
@@ -55,8 +67,14 @@ A modern Android application built with Jetpack Compose that allows students to 
 - **Jetpack Compose**: Modern UI toolkit
 - **Material Design 3**: UI components and theming
 - **Navigation Compose**: Screen navigation
-- **ViewModel**: MVVM architecture
-- **LiveData**: Reactive data observation
+- **ViewModel**: MVVM architecture with StateFlow
+- **LiveData & StateFlow**: Reactive data observation
+
+### Data Layer
+- **Room Database**: Complete offline data persistence
+- **Repository Pattern**: Clean data access abstraction
+- **DataState Management**: Comprehensive loading state handling
+- **SyncManager**: Centralized synchronization logic
 
 ### Backend Integration
 - **Retrofit2**: HTTP client for API calls
@@ -65,8 +83,9 @@ A modern Android application built with Jetpack Compose that allows students to 
 - **Coroutines**: Asynchronous programming
 
 ### Data Management
-- **SharedPreferences**: Local data storage
-- **Room Database**: (Future enhancement)
+- **SharedPreferences**: App settings and user preferences
+- **Room Database**: Complete offline data storage
+- **Automatic Sync**: Background data synchronization
 
 ## App Structure
 
@@ -74,28 +93,41 @@ A modern Android application built with Jetpack Compose that allows students to 
 app/
 ├── data/
 │   ├── api/                 # API interfaces and Retrofit setup
-│   ├── model/              # Data models (Student, Violation, Attendance)
-│   └── preferences/        # SharedPreferences utilities
+│   ├── model/              # Data models (Student, Violation, Attendance, DataState)
+│   ├── preferences/        # SharedPreferences utilities
+│   └── sync/               # SyncManager for offline-online synchronization
 ├── navigation/             # Navigation setup
+├── roomdb/
+│   ├── dao/                # Data Access Objects with student filtering
+│   ├── entity/             # Room database entities
+│   ├── repository/         # Repository pattern implementation
+│   ├── AppDatabase.kt      # Room database configuration
+│   └── DatabaseProvider.kt # Database instance provider
 ├── ui/
-│   ├── components/         # Reusable UI components
-│   ├── screen/            # App screens
+│   ├── components/         # Reusable UI components (LoadingComponents, etc.)
+│   ├── screen/            # App screens with enhanced loading states
 │   └── theme/             # Colors, typography, themes
-└── viewmodel/             # Business logic and state management
+└── viewmodel/             # Business logic with DataState management
 ```
 
 ## Screenshots & UI Flow
 
 ### Authentication Flow
-1. **Login/Register Screen**: Toggle between login and registration
+1. **Login/Register Screen**: Toggle between login and registration with enhanced loading states
 2. **Settings01**: Configure server IP and port before first use
 
 ### Main App Flow
-1. **Home Screen**: Switch between "My Violations" and "My Attendance" tabs
-2. **Violations Tab**: List of violations with acknowledgment feature
+1. **Home Screen**: Switch between "My Violations" and "My Attendance" tabs with sync status
+2. **Violations Tab**: List of violations with "View Details" buttons (acknowledgment is hidden)
 3. **Violation Details**: Detailed view with student data and penalty information
-4. **Attendance Tab**: Interactive calendar with monthly navigation
-5. **Settings02**: Profile management and system settings
+4. **Attendance Tab**: Interactive calendar with monthly navigation and offline support
+5. **Settings02**: Profile management and system settings with network status
+
+### Offline Features
+- **Offline Mode**: App displays "Offline Mode" when no internet connection
+- **Cached Data**: All violations and attendance are cached locally
+- **Background Sync**: Data syncs automatically when connection is restored
+- **Loading States**: Professional loading indicators throughout the app
 
 ## Installation & Setup
 
@@ -190,30 +222,90 @@ The app expects these PHP endpoints:
 ### Violation System
 - **Automatic Penalty Calculation**: Based on offense count and violation type
 - **Color Coding**: Visual indicators for severity levels
-- **Acknowledgment System**: Students must acknowledge violations
+- **Hidden Acknowledgment System**: Violations are automatically acknowledged when students view details (completely transparent to students)
+- **Offline Functionality**: View and acknowledge violations without internet connection
+- **Real-time Sync**: Background synchronization with conflict resolution
 - **Comprehensive Categories**: Four main violation categories with specific penalties
 
 ### Attendance System
-- **Calendar Interface**: Easy-to-read monthly view
+- **Calendar Interface**: Easy-to-read monthly view with offline support
 - **Status Tracking**: Present, absent, and late status
-- **Statistics**: Monthly attendance summaries
-- **Navigation**: Previous/next month browsing
+- **Statistics**: Monthly attendance summaries with local calculation
+- **Navigation**: Previous/next month browsing with cached data
+- **Offline Mode**: Full calendar functionality without internet
 
 ### Settings System
 - **Dual Settings Screens**: Separate for system and user settings
-- **IP Configuration**: Easy server setup
-- **Connection Testing**: Verify database connectivity
-- **Profile Updates**: Change academic information
+- **IP Configuration**: Easy server setup with connection testing
+- **Network Monitoring**: Real-time network status display
+- **Profile Updates**: Change academic information with sync
+- **Offline Indicator**: Clear offline/online mode display
+
+### Sync & Offline Features
+- **Offline-First Design**: Local data is always prioritized
+- **Background Sync**: Automatic synchronization every 5 minutes
+- **Conflict Resolution**: Smart merging of local and remote changes
+- **Network Detection**: Automatic online/offline mode switching
+- **Retry Logic**: Automatic retry on failed operations
+- **Loading States**: Professional loading indicators and error handling
+
+## New Features (Latest Version)
+
+### 🔄 Complete Offline Support
+- **Works Without Internet**: Full app functionality available offline
+- **Local Database**: Room database for complete data persistence
+- **Smart Sync**: Automatic background synchronization
+- **Conflict Resolution**: Handles data conflicts intelligently
+
+### 📊 Enhanced Loading States
+- **Professional UI**: Loading indicators throughout the app
+- **Error Handling**: User-friendly error messages with retry options
+- **Sync Status**: Real-time sync and network connectivity indicators
+- **Empty States**: Proper empty state handling
+
+### 🔍 Hidden Acknowledge Feature
+- **Transparent to Students**: Acknowledgment happens automatically when viewing details
+- **Administrative Tracking**: Full acknowledgment tracking maintained
+- **Seamless UX**: Students see only "View Details" buttons
+
+### ⚡ Performance Improvements
+- **Instant Loading**: Local data displayed immediately
+- **Efficient Sync**: Only changed data is synchronized
+- **Memory Optimization**: Proper resource management
 
 ## Future Enhancements
 
 - [ ] Push notifications for new violations
-- [ ] Offline data synchronization
+- [x] ~~Offline data synchronization~~ ✅ **Implemented**
 - [ ] Export attendance reports
 - [ ] Parent/guardian access
 - [ ] Biometric login
 - [ ] Dark theme support
 - [ ] Multi-language support
+- [x] ~~Enhanced loading states~~ ✅ **Implemented**
+- [x] ~~Background sync~~ ✅ **Implemented**
+- [ ] Data export functionality
+- [ ] Advanced analytics dashboard
+
+## Architecture Highlights
+
+### MVVM with Jetpack Compose
+- **Clean Architecture**: Separation of concerns with Repository pattern
+- **DataState Management**: Comprehensive state handling (Loading, Success, Error, Cached)
+- **Reactive UI**: StateFlow and LiveData for reactive programming
+- **Offline-First**: Local data prioritized with network sync
+
+### Room Database Integration
+- **Complete Offline Storage**: All violations and attendance cached locally
+- **Student-Specific Queries**: Secure data filtering by student ID
+- **Automatic Sync**: Background synchronization with conflict resolution
+- **Performance Optimized**: Efficient queries and data structures
+
+### Sync Management
+- **SyncManager**: Centralized synchronization logic
+- **Network Awareness**: Automatic online/offline detection
+- **Retry Logic**: Robust error handling and recovery
+- **Conflict Resolution**: Smart data merging strategies
 
 ## Contributing
 
@@ -236,12 +328,44 @@ For issues and questions:
 
 ## Version History
 
-### v1.0.0 (Current)
+### v2.0.0 (Current - Enhanced)
+- ✅ **Complete Offline Functionality**: Full app works without internet
+- ✅ **Room Database Integration**: Complete local data persistence
+- ✅ **Enhanced Loading States**: Professional loading indicators and error handling
+- ✅ **Background Sync**: Automatic synchronization every 5 minutes
+- ✅ **Hidden Acknowledge System**: Transparent violation acknowledgment
+- ✅ **Sync Status Indicators**: Real-time network and sync status
+- ✅ **DataState Management**: Comprehensive state handling throughout app
+- ✅ **Conflict Resolution**: Smart data merging and error recovery
+- ✅ **Performance Optimization**: Instant local data display
+- ✅ **Enhanced UX**: Modern loading components and error handling
+
+### v1.0.0 (Previous)
 - Initial release with all core features
 - Modern Compose UI
 - Complete CRUD operations
 - Attendance calendar
 - Dual database support
+
+## Technical Improvements
+
+### Code Quality
+- **Clean Architecture**: Repository pattern with proper separation of concerns
+- **MVVM Implementation**: Enhanced ViewModels with StateFlow and DataState
+- **Error Handling**: Comprehensive error management throughout the app
+- **Memory Management**: Proper coroutine lifecycle management
+
+### Performance
+- **Offline-First**: Instant data display from local cache
+- **Efficient Sync**: Background synchronization with minimal battery usage
+- **Memory Optimization**: Proper resource cleanup and management
+- **Network Optimization**: Smart data fetching and caching strategies
+
+### User Experience
+- **Professional Loading States**: Consistent loading indicators across all screens
+- **Error Recovery**: User-friendly error messages with retry mechanisms
+- **Network Awareness**: Clear offline/online status indication
+- **Seamless Sync**: Transparent background synchronization
 
 ---
 

@@ -4,22 +4,33 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.asLiveData
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.yourapp.test.myrecordinschool.data.api.RetrofitClient
-import com.yourapp.test.myrecordinschool.data.model.Violation
+import com.yourapp.test.myrecordinschool.data.model.*
 import com.yourapp.test.myrecordinschool.data.preferences.AppPreferences
+import com.yourapp.test.myrecordinschool.data.sync.SyncManager
 import com.yourapp.test.myrecordinschool.roomdb.AppDatabase
 import com.yourapp.test.myrecordinschool.roomdb.entity.ViolationEntity
 import com.yourapp.test.myrecordinschool.roomdb.repository.ViolationRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class ViolationViewModel(application: Application) : AndroidViewModel(application) {
     
     private val appPreferences = AppPreferences(application)
     private val violationDao = AppDatabase.getDatabase(application).violationDao()
-
+    private val repository = ViolationRepository(violationDao)
+    private val syncManager = SyncManager(application)
+    
+    // Data state for violations
+    private val _violationDataState = MutableStateFlow<DataState<List<ViolationEntity>>>(DataState.Loading)
+    val violationDataState: StateFlow<DataState<List<ViolationEntity>>> = _violationDataState.asStateFlow()
+    
+    // Legacy LiveData for backwards compatibility
     private val _violations = MutableLiveData<List<Violation>>()
     val violations: LiveData<List<Violation>> = _violations
     
@@ -32,85 +43,126 @@ class ViolationViewModel(application: Application) : AndroidViewModel(applicatio
     private val _selectedViolation = MutableLiveData<Violation?>()
     val selectedViolation: LiveData<Violation?> = _selectedViolation
 
-    // Repository (with Room)
-    private val repository = ViolationRepository(violationDao)
+    // Observable violations from database (offline-first)
+    val violationsFromDb: LiveData<List<ViolationEntity>> = 
+        appPreferences.getStudentId()?.let { studentId ->
+            repository.getViolationsByStudent(studentId).asLiveData()
+        } ?: MutableLiveData(emptyList())
+    
+    // Sync status
+    val syncStatus: StateFlow<SyncStatus> = syncManager.syncStatus
+    val networkState: StateFlow<NetworkState> = syncManager.networkState
+    
+    // Unacknowledged violations count
+    val unacknowledgedCount: LiveData<Int> = 
+        appPreferences.getStudentId()?.let { studentId ->
+            repository.getUnacknowledgedViolations(studentId)
+                .map { it.size }
+                .asLiveData()
+        } ?: MutableLiveData(0)
 
-    // Observed in UI (offline + auto updates)
-    val violationsFromDb: LiveData<List<ViolationEntity>> =
-        repository.getViolations().asLiveData()
+    init {
+        loadViolationsOfflineFirst()
+        syncManager.startPeriodicSync()
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        syncManager.stopPeriodicSync()
+    }
+    
+    private fun loadViolationsOfflineFirst() {
+        val studentId = appPreferences.getStudentId()
+        if (studentId == null) {
+            _violationDataState.value = DataState.Error("Student ID not found. Please log in again.")
+            return
+        }
+        
+        viewModelScope.launch {
+            // First, load from cache
+            val cachedCount = repository.getViolationCount(studentId)
+            if (cachedCount > 0) {
+                _violationDataState.value = DataState.Cached(
+                    data = emptyList(), // Will be populated by Flow
+                    isStale = shouldRefreshData()
+                )
+            } else {
+                _violationDataState.value = DataState.Loading
+            }
+            
+            // Then sync from network
+            refreshViolations()
+        }
+    }
+    
+    private fun shouldRefreshData(): Boolean {
+        val lastSyncTime = syncManager.syncStatus.value.lastSyncTime
+        val currentTime = System.currentTimeMillis()
+        val fiveMinutes = 5 * 60 * 1000L
+        return (currentTime - lastSyncTime) > fiveMinutes
+    }
 
-    // API fetch, then save to DB
     fun loadViolations() {
         viewModelScope.launch {
             _isLoading.value = true
-            try {
-                val studentId = appPreferences.getStudentId()
-                if (studentId != null) {
-                    val config = appPreferences.getAppConfig()
-                    val api = RetrofitClient.getViolationApi(config.baseUrl)
-                    val response = api.getStudentViolations(studentId)
-
-                    if (response.isSuccessful) {
-                        val responseBody = response.body()
-                        if (responseBody?.success == true) {
-                            val violations = responseBody.violations ?: emptyList()
-
-                            // Convert to entities
-                            val entities = violations.map { v ->
-                                ViolationEntity(
-                                    id = v.id,
-                                    student_id = v.student_id,
-                                    student_name = v.student_name,
-                                    year_level = v.year_level,
-                                    course = v.course,
-                                    section = v.section,
-                                    violation_type = v.violation_type,
-                                    violation_description = v.violation_description,
-                                    offense_count = v.offense_count,
-                                    original_offense_count = v.original_offense_count,
-                                    penalty = v.penalty,
-                                    recorded_by = v.recorded_by,
-                                    date_recorded = v.date_recorded,
-                                    acknowledged = v.acknowledged,
-                                    category = v.category
-                                )
-                            }
-
-                            // Save into Room DB for offline
-                            repository.saveViolations(entities)
-                        }
-                    }
+            _violationDataState.value = DataState.Loading
+            
+            val success = syncManager.syncViolations()
+            
+            if (success) {
+                _violationDataState.value = DataState.Success(emptyList()) // Will be populated by Flow
+            } else {
+                val errorMsg = when (val syncState = syncManager.syncStatus.value.syncState) {
+                    is SyncState.Error -> syncState.message
+                    else -> "Failed to load violations"
                 }
-            } catch (e: Exception) {
-                _errorMessage.value = "Network error: ${e.message}"
-            } finally {
-                _isLoading.value = false
+                _violationDataState.value = DataState.Error(errorMsg)
+                _errorMessage.value = errorMsg
             }
+            
+            _isLoading.value = false
         }
     }
-
-
+    
+    fun refreshViolations() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            val success = syncManager.syncViolations(forceRefresh = true)
+            
+            if (success) {
+                _violationDataState.value = DataState.Success(emptyList())
+                _errorMessage.value = ""
+            } else {
+                val errorMsg = when (val syncState = syncManager.syncStatus.value.syncState) {
+                    is SyncState.Error -> syncState.message
+                    else -> "Failed to refresh violations"
+                }
+                _violationDataState.value = DataState.Error(errorMsg)
+                _errorMessage.value = errorMsg
+            }
+            
+            _isLoading.value = false
+        }
+    }
 
     fun acknowledgeViolation(violationId: Int) {
         viewModelScope.launch {
             try {
-                val config = appPreferences.getAppConfig()
-                val api = RetrofitClient.getViolationApi(config.baseUrl)
-                val response = api.acknowledgeViolation(violationId)
+                // Update local database immediately for better UX
+                repository.updateAcknowledgment(violationId, 1)
                 
-                if (response.isSuccessful && response.body()?.success == true) {
-                    // Update the violation in the local list
-                    val currentViolations = _violations.value?.toMutableList() ?: mutableListOf()
-                    val index = currentViolations.indexOfFirst { it.id == violationId }
-                    if (index != -1) {
-                        currentViolations[index] = currentViolations[index].copy(acknowledged = 1)
-                        _violations.value = currentViolations
-                    }
-                } else {
-                    _errorMessage.value = response.body()?.message ?: "Failed to acknowledge violation"
+                // Sync with backend
+                val success = syncManager.syncAcknowledgment(violationId)
+                
+                if (!success) {
+                    // Revert local change if sync failed
+                    repository.updateAcknowledgment(violationId, 0)
+                    _errorMessage.value = "Failed to acknowledge violation. Please try again."
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Network error: ${e.message}"
+                _errorMessage.value = "Error acknowledging violation: ${e.message}"
+                android.util.Log.e("ViolationViewModel", "Error acknowledging violation", e)
             }
         }
     }
@@ -134,6 +186,37 @@ class ViolationViewModel(application: Application) : AndroidViewModel(applicatio
     
     fun clearError() {
         _errorMessage.value = ""
+        syncManager.resetSyncState()
+    }
+    
+    fun retryOperation() {
+        clearError()
+        loadViolations()
+    }
+    
+    fun updateNetworkState(isAvailable: Boolean) {
+        syncManager.updateNetworkState(isAvailable)
+    }
+    
+    // Helper function to convert ViolationEntity to Violation for compatibility
+    fun convertToViolation(entity: ViolationEntity): Violation {
+        return Violation(
+            id = entity.id,
+            student_id = entity.student_id,
+            student_name = entity.student_name,
+            year_level = entity.year_level,
+            course = entity.course,
+            section = entity.section,
+            violation_type = entity.violation_type,
+            violation_description = entity.violation_description,
+            offense_count = entity.offense_count,
+            original_offense_count = entity.original_offense_count,
+            penalty = entity.penalty,
+            recorded_by = entity.recorded_by,
+            date_recorded = entity.date_recorded,
+            acknowledged = entity.acknowledged,
+            category = entity.category
+        )
     }
     
     fun debugAppState() {

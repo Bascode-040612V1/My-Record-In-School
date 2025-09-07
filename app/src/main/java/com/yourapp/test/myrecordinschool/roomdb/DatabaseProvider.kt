@@ -12,7 +12,7 @@ object DatabaseProvider {
             val instance = Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
-                "school_records_db"
+                "school_db"
             )
                 .fallbackToDestructiveMigration() // reset DB if schema mismatch
                 .build()
