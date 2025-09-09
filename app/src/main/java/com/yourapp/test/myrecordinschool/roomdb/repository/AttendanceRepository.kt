@@ -6,6 +6,13 @@ import kotlinx.coroutines.flow.Flow
 
 class AttendanceRepository(private val attendanceDao: AttendanceDao) {
 
+    // Cache timeout: 10 minutes (following memory specification)
+    private val cacheTimeout = 10 * 60 * 1000L
+
+    fun getAllAttendance(): Flow<List<AttendanceEntity>> {
+        return attendanceDao.getAllAttendance()
+    }
+
     fun getAttendanceByStudent(studentId: String): Flow<List<AttendanceEntity>> {
         return attendanceDao.getAttendanceByStudent(studentId)
     }
@@ -18,7 +25,7 @@ class AttendanceRepository(private val attendanceDao: AttendanceDao) {
         attendanceDao.insertAttendance(attendance)
     }
 
-    suspend fun saveSingleAttendance(attendance: AttendanceEntity) {
+    suspend fun saveAttendance(attendance: AttendanceEntity) {
         attendanceDao.insertSingleAttendance(attendance)
     }
 
@@ -30,20 +37,44 @@ class AttendanceRepository(private val attendanceDao: AttendanceDao) {
         attendanceDao.deleteAttendanceByMonth(studentId, yearMonth)
     }
 
-    suspend fun getAttendanceStats(studentId: String): AttendanceStats {
-        return AttendanceStats(
-            presentCount = attendanceDao.getPresentCount(studentId),
-            absentCount = attendanceDao.getAbsentCount(studentId),
-            lateCount = attendanceDao.getLateCount(studentId)
-        )
+    suspend fun getPresentCount(studentId: String): Int {
+        return attendanceDao.getPresentCount(studentId)
     }
-}
 
-data class AttendanceStats(
-    val presentCount: Int,
-    val absentCount: Int,
-    val lateCount: Int
-) {
-    val totalDays: Int get() = presentCount + absentCount + lateCount
-    val attendanceRate: Float get() = if (totalDays > 0) presentCount.toFloat() / totalDays else 0f
+    suspend fun getAbsentCount(studentId: String): Int {
+        return attendanceDao.getAbsentCount(studentId)
+    }
+
+    suspend fun getLateCount(studentId: String): Int {
+        return attendanceDao.getLateCount(studentId)
+    }
+
+    // Optimized methods for delta sync and caching
+    suspend fun getRecentAttendance(studentId: String, limit: Int = 30): List<AttendanceEntity> {
+        return attendanceDao.getRecentAttendance(studentId, limit)
+    }
+
+    suspend fun getAttendanceSince(studentId: String, since: String): List<AttendanceEntity> {
+        return attendanceDao.getAttendanceSince(studentId, since)
+    }
+
+    suspend fun getLastUpdateTimestamp(studentId: String): Long {
+        return attendanceDao.getLastUpdateTimestamp(studentId) ?: 0L
+    }
+
+    suspend fun isCacheValid(studentId: String): Boolean {
+        val lastUpdate = getLastUpdateTimestamp(studentId)
+        return (System.currentTimeMillis() - lastUpdate) < cacheTimeout
+    }
+
+    suspend fun getAttendanceByDateRange(studentId: String, startDate: String, endDate: String): List<AttendanceEntity> {
+        return attendanceDao.getAttendanceByDateRange(studentId, startDate, endDate)
+    }
+
+    suspend fun getAttendanceStats(studentId: String): AttendanceStats {
+        val presentCount = attendanceDao.getPresentCount(studentId)
+        val absentCount = attendanceDao.getAbsentCount(studentId)
+        val lateCount = attendanceDao.getLateCount(studentId)
+        return AttendanceStats.calculate(presentCount, absentCount, lateCount)
+    }
 }

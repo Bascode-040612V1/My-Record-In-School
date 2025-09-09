@@ -24,6 +24,19 @@ interface ViolationApi {
     
     @PUT("violations/acknowledge.php/{id}")
     suspend fun acknowledgeViolation(@Path("id") violationId: Int): Response<ViolationResponse>
+    
+    // Optimized endpoints for delta sync
+    @GET("violations/index.php/{student_id}")
+    suspend fun getStudentViolationsSince(
+        @Path("student_id") studentId: String,
+        @Query("since") timestamp: Long
+    ): Response<ViolationResponse>
+    
+    @GET("violations/index.php/{student_id}")
+    suspend fun getRecentViolations(
+        @Path("student_id") studentId: String,
+        @Query("limit") limit: Int = 20
+    ): Response<ViolationResponse>
 }
 
 interface AttendanceApi {
@@ -32,6 +45,21 @@ interface AttendanceApi {
          @Path("student_number") studentNumber: String,
         @Query("month") month: Int? = null,
         @Query("year") year: Int? = null
+    ): Response<AttendanceResponse>
+    
+    // Optimized endpoints for delta sync and minimal data transfer
+    @GET("attendance/index.php/{student_number}")
+    suspend fun getStudentAttendanceSince(
+        @Path("student_number") studentNumber: String,
+        @Query("since") timestamp: Long,
+        @Query("month") month: Int? = null,
+        @Query("year") year: Int? = null
+    ): Response<AttendanceResponse>
+    
+    @GET("attendance/index.php/{student_number}")
+    suspend fun getRecentAttendance(
+        @Path("student_number") studentNumber: String,
+        @Query("limit") limit: Int = 30
     ): Response<AttendanceResponse>
 }
 

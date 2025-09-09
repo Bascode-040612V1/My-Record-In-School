@@ -35,4 +35,20 @@ interface AttendanceDao {
 
     @Query("DELETE FROM attendance WHERE student_id = :studentId AND date LIKE :yearMonth || '%'")
     suspend fun deleteAttendanceByMonth(studentId: String, yearMonth: String)
+    
+    // Optimized queries for delta sync and caching
+    @Query("SELECT * FROM attendance WHERE student_id = :studentId ORDER BY date DESC LIMIT :limit")
+    suspend fun getRecentAttendance(studentId: String, limit: Int): List<AttendanceEntity>
+
+    @Query("SELECT * FROM attendance WHERE student_id = :studentId AND date > :since ORDER BY date DESC")
+    suspend fun getAttendanceSince(studentId: String, since: String): List<AttendanceEntity>
+
+    @Query("SELECT MAX(date) FROM attendance WHERE student_id = :studentId")
+    suspend fun getLastUpdateTimestamp(studentId: String): Long?
+
+    @Query("SELECT * FROM attendance WHERE student_id = :studentId AND date BETWEEN :startDate AND :endDate ORDER BY date DESC")
+    suspend fun getAttendanceByDateRange(studentId: String, startDate: String, endDate: String): List<AttendanceEntity>
+
+    @Query("SELECT * FROM attendance ORDER BY date DESC")
+    fun getAllAttendance(): Flow<List<AttendanceEntity>>
 }

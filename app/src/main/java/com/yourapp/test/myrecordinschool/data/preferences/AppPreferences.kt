@@ -20,6 +20,11 @@ class AppPreferences(context: Context) {
         private const val KEY_STUDENT_COURSE = "student_course"
         private const val KEY_STUDENT_SECTION = "student_section"
         private const val KEY_FIRST_TIME = "first_time"
+        
+        // Sync tracking keys for optimization
+        private const val KEY_LAST_VIOLATION_SYNC = "last_violation_sync"
+        private const val KEY_LAST_ATTENDANCE_SYNC = "last_attendance_sync"
+        private const val KEY_CACHE_TIMEOUT = "cache_timeout"
     }
     
     // App Configuration
@@ -107,7 +112,48 @@ class AppPreferences(context: Context) {
             remove(KEY_STUDENT_YEAR)
             remove(KEY_STUDENT_COURSE)
             remove(KEY_STUDENT_SECTION)
+            // Clear sync data on logout
+            remove(KEY_LAST_VIOLATION_SYNC)
+            remove(KEY_LAST_ATTENDANCE_SYNC)
             apply()
         }
+    }
+
+    // Sync tracking methods for optimization
+    fun setLastViolationSync(timestamp: Long) {
+        sharedPreferences.edit()
+            .putLong(KEY_LAST_VIOLATION_SYNC, timestamp)
+            .apply()
+    }
+
+    fun getLastViolationSync(): Long {
+        return sharedPreferences.getLong(KEY_LAST_VIOLATION_SYNC, 0L)
+    }
+
+    fun setLastAttendanceSync(timestamp: Long) {
+        sharedPreferences.edit()
+            .putLong(KEY_LAST_ATTENDANCE_SYNC, timestamp)
+            .apply()
+    }
+
+    fun getLastAttendanceSync(): Long {
+        return sharedPreferences.getLong(KEY_LAST_ATTENDANCE_SYNC, 0L)
+    }
+
+    fun setCacheTimeout(timeoutMs: Long) {
+        sharedPreferences.edit()
+            .putLong(KEY_CACHE_TIMEOUT, timeoutMs)
+            .apply()
+    }
+
+    fun getCacheTimeout(): Long {
+        return sharedPreferences.getLong(KEY_CACHE_TIMEOUT, 10 * 60 * 1000L) // Default 10 minutes
+    }
+
+    fun clearSyncData() {
+        sharedPreferences.edit()
+            .remove(KEY_LAST_VIOLATION_SYNC)
+            .remove(KEY_LAST_ATTENDANCE_SYNC)
+            .apply()
     }
 }

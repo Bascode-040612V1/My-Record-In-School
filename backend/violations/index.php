@@ -44,23 +44,55 @@ try {
     
     $student_id = $path_parts[0];
     
-    // Get student violations using optimized query with offense count calculation
-    $query = "SELECT v.id, v.student_id, v.student_name, v.year_level, v.course, v.section,
-                     v.offense_count, v.penalty, v.recorded_by, v.recorded_at, v.acknowledged,
-                     GROUP_CONCAT(DISTINCT vd.violation_type ORDER BY vd.id SEPARATOR ', ') as violations_list,
-                     -- Calculate the highest offense count for this violation record
-                     COALESCE((SELECT MAX(soc.offense_count) 
-                              FROM student_violation_offense_counts soc 
-                              INNER JOIN violation_details vd2 ON vd2.violation_type = soc.violation_type 
-                              WHERE vd2.violation_id = v.id AND soc.student_id = v.student_id), v.offense_count) as highest_offense_count
-              FROM violations v 
-              LEFT JOIN violation_details vd ON v.id = vd.violation_id
-              WHERE v.student_id = :student_id 
-              GROUP BY v.id
-              ORDER BY v.recorded_at DESC";
-              
-    $stmt = $conn->prepare($query);
-    $stmt->bindParam(':student_id', $student_id);
+    // Check for delta sync parameters for optimization
+    $since_timestamp = isset($_GET['since']) ? intval($_GET['since']) : 0;
+    $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 0;
+    
+    // Build optimized query based on parameters
+    if ($since_timestamp > 0) {
+        // Delta sync - only get records modified since timestamp
+        $since_date = date('Y-m-d H:i:s', $since_timestamp / 1000);
+        $query = "SELECT v.id, v.student_id, v.student_name, v.year_level, v.course, v.section,
+                         v.offense_count, v.penalty, v.recorded_by, v.recorded_at, v.acknowledged,
+                         GROUP_CONCAT(DISTINCT vd.violation_type ORDER BY vd.id SEPARATOR ', ') as violations_list
+                  FROM violations v 
+                  LEFT JOIN violation_details vd ON v.id = vd.violation_id
+                  WHERE v.student_id = :student_id AND v.recorded_at > :since_date
+                  GROUP BY v.id
+                  ORDER BY v.recorded_at DESC";
+        if ($limit > 0) {
+            $query .= " LIMIT :limit";
+        }
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(':student_id', $student_id);
+        $stmt->bindParam(':since_date', $since_date);
+        if ($limit > 0) {
+            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+        }
+    } else {
+        // Full sync with optional limit
+        $query = "SELECT v.id, v.student_id, v.student_name, v.year_level, v.course, v.section,
+                         v.offense_count, v.penalty, v.recorded_by, v.recorded_at, v.acknowledged,
+                         GROUP_CONCAT(DISTINCT vd.violation_type ORDER BY vd.id SEPARATOR ', ') as violations_list,
+                         COALESCE((SELECT MAX(soc.offense_count) 
+                                  FROM student_violation_offense_counts soc 
+                                  INNER JOIN violation_details vd2 ON vd2.violation_type = soc.violation_type 
+                                  WHERE vd2.violation_id = v.id AND soc.student_id = v.student_id), v.offense_count) as highest_offense_count
+                  FROM violations v 
+                  LEFT JOIN violation_details vd ON v.id = vd.violation_id
+                  WHERE v.student_id = :student_id 
+                  GROUP BY v.id
+                  ORDER BY v.recorded_at DESC";
+        if ($limit > 0) {
+            $query .= " LIMIT :limit";
+        }
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(':student_id', $student_id);
+        if ($limit > 0) {
+            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+        }
+    }
+    
     $stmt->execute();
     
     $violations = array();
@@ -100,8 +132,8 @@ try {
             "section" => $row['section'],
             "violation_type" => $violations_list ?: "No specific violation",
             "violation_description" => $violations_list ?: "Multiple violations",
-            "offense_count" => intval($row['highest_offense_count']), // Use the highest offense count
-            "original_offense_count" => intval($row['offense_count']), // Keep original for reference
+            "offense_count" => intval($row['highest_offense_count'] ?? $row['offense_count']),
+            "original_offense_count" => intval($row['offense_count']),
             "penalty" => $row['penalty'] ?: "Warning",
             "recorded_by" => $row['recorded_by'],
             "date_recorded" => $row['recorded_at'],
@@ -110,11 +142,17 @@ try {
         );
     }
     
-    // Return results
+    // Return optimized results
     echo json_encode(array(
         "success" => true,
         "message" => count($violations) > 0 ? "Violations retrieved successfully" : "No violations found for this student. Student ID: {$student_id}",
         "violations" => $violations,
+        "sync_info" => array(
+            "is_delta_sync" => $since_timestamp > 0,
+            "since_timestamp" => $since_timestamp,
+            "limit_applied" => $limit > 0 ? $limit : null,
+            "server_timestamp" => time() * 1000 // Current server time in milliseconds
+        ),
         "debug_info" => array(
             "student_id_searched" => $student_id,
             "violations_count" => count($violations)

@@ -19,5 +19,9 @@ data class ViolationEntity(
     val recorded_by: String,
     val date_recorded: String,
     val acknowledged: Int,
-    val category: String
+    val category: String,
+    // Sync tracking fields for optimization
+    val last_sync_timestamp: Long = System.currentTimeMillis(),
+    val is_synced: Boolean = true,
+    val local_changes: Boolean = false
 )

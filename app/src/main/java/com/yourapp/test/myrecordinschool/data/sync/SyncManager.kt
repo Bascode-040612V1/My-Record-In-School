@@ -34,6 +34,7 @@ class SyncManager(private val application: Application) {
         private const val TAG = "SyncManager"
         private const val SYNC_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
         private const val RETRY_DELAY_MS = 30 * 1000L // 30 seconds
+        private const val CACHE_TIMEOUT_MS = 10 * 60 * 1000L // 10 minutes
     }
     
     suspend fun syncViolations(forceRefresh: Boolean = false): Boolean {
@@ -42,14 +43,35 @@ class SyncManager(private val application: Application) {
         return try {
             _syncStatus.value = _syncStatus.value.copy(syncState = SyncState.Syncing)
             
+            // Smart caching - check if we need to sync
+            if (!forceRefresh && violationRepository.isCacheValid(studentId)) {
+                Log.d(TAG, "Using cached violations data - cache still valid")
+                _syncStatus.value = _syncStatus.value.copy(
+                    syncState = SyncState.Success,
+                    lastSyncTime = System.currentTimeMillis()
+                )
+                return true
+            }
+            
             val config = appPreferences.getAppConfig()
             val api = RetrofitClient.getViolationApi(config.baseUrl)
-            val response = api.getStudentViolations(studentId)
+            
+            // Delta sync - only get data since last update
+            val lastSyncTime = appPreferences.getLastViolationSync()
+            val response = if (lastSyncTime > 0 && !forceRefresh) {
+                Log.d(TAG, "Performing delta sync for violations since: $lastSyncTime")
+                api.getStudentViolationsSince(studentId, lastSyncTime)
+            } else {
+                Log.d(TAG, "Performing full sync for violations")
+                api.getStudentViolations(studentId)
+            }
             
             if (response.isSuccessful && response.body()?.success == true) {
                 val violations = response.body()?.violations ?: emptyList()
                 
-                // Convert to entities
+                Log.d(TAG, "Received ${violations.size} violations (delta sync: ${lastSyncTime > 0})")
+                
+                // Convert to entities with sync tracking
                 val entities = violations.map { violation ->
                     ViolationEntity(
                         id = violation.id,
@@ -66,7 +88,10 @@ class SyncManager(private val application: Application) {
                         recorded_by = violation.recorded_by,
                         date_recorded = violation.date_recorded,
                         acknowledged = violation.acknowledged,
-                        category = violation.category
+                        category = violation.category,
+                        last_sync_timestamp = System.currentTimeMillis(),
+                        is_synced = true,
+                        local_changes = false
                     )
                 }
                 
@@ -75,6 +100,10 @@ class SyncManager(private val application: Application) {
                     violationRepository.clearViolationsForStudent(studentId)
                 }
                 violationRepository.saveViolations(entities)
+                
+                // Update sync timestamps
+                appPreferences.setLastViolationSync(System.currentTimeMillis())
+                violationRepository.updateSyncTimestamp(studentId, System.currentTimeMillis())
                 
                 _syncStatus.value = _syncStatus.value.copy(
                     syncState = SyncState.Success,
@@ -104,12 +133,33 @@ class SyncManager(private val application: Application) {
         return try {
             _syncStatus.value = _syncStatus.value.copy(syncState = SyncState.Syncing)
             
+            // Smart caching for attendance
+            if (!forceRefresh && attendanceRepository.isCacheValid(studentId)) {
+                Log.d(TAG, "Using cached attendance data - cache still valid")
+                _syncStatus.value = _syncStatus.value.copy(
+                    syncState = SyncState.Success,
+                    lastSyncTime = System.currentTimeMillis()
+                )
+                return true
+            }
+            
             val config = appPreferences.getAppConfig()
             val api = RetrofitClient.getAttendanceApi(config.baseUrl)
-            val response = api.getStudentAttendance(studentId, month, year)
+            
+            // Delta sync for attendance
+            val lastSyncTime = appPreferences.getLastAttendanceSync()
+            val response = if (lastSyncTime > 0 && !forceRefresh) {
+                Log.d(TAG, "Performing delta sync for attendance since: $lastSyncTime")
+                api.getStudentAttendanceSince(studentId, lastSyncTime, month, year)
+            } else {
+                Log.d(TAG, "Performing full sync for attendance")
+                api.getStudentAttendance(studentId, month, year)
+            }
             
             if (response.isSuccessful && response.body()?.success == true) {
                 val attendance = response.body()?.attendance ?: emptyList()
+                
+                Log.d(TAG, "Received ${attendance.size} attendance records (delta sync: ${lastSyncTime > 0})")
                 
                 // Convert to entities
                 val entities = attendance.map { att ->
@@ -136,6 +186,9 @@ class SyncManager(private val application: Application) {
                 }
                 
                 attendanceRepository.saveAttendance(entities)
+                
+                // Update sync timestamp
+                appPreferences.setLastAttendanceSync(System.currentTimeMillis())
                 
                 _syncStatus.value = _syncStatus.value.copy(
                     syncState = SyncState.Success,
@@ -203,7 +256,8 @@ class SyncManager(private val application: Application) {
                 delay(SYNC_INTERVAL_MS)
                 if (_networkState.value == NetworkState.Available) {
                     try {
-                        performFullSync()
+                        // Smart sync - only sync if cache is stale
+                        performSmartSync()
                     } catch (e: Exception) {
                         Log.e(TAG, "Periodic sync failed", e)
                     }
@@ -211,7 +265,32 @@ class SyncManager(private val application: Application) {
             }
         }
     }
-    
+
+    private suspend fun performSmartSync(): Boolean {
+        val studentId = appPreferences.getStudentId() ?: return false
+        
+        val needsViolationSync = !violationRepository.isCacheValid(studentId)
+        val needsAttendanceSync = !attendanceRepository.isCacheValid(studentId)
+        
+        var success = true
+        
+        if (needsViolationSync) {
+            Log.d(TAG, "Cache stale, syncing violations...")
+            success = syncViolations() && success
+        }
+        
+        if (needsAttendanceSync) {
+            Log.d(TAG, "Cache stale, syncing attendance...")
+            success = syncAttendance() && success
+        }
+        
+        if (!needsViolationSync && !needsAttendanceSync) {
+            Log.d(TAG, "Cache still valid, skipping sync")
+        }
+        
+        return success
+    }
+
     fun stopPeriodicSync() {
         syncJob?.cancel()
         syncJob = null

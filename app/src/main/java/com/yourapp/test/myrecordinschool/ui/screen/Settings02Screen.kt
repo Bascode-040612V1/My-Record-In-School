@@ -1,8 +1,14 @@
 package com.yourapp.test.myrecordinschool.ui.screen
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -12,11 +18,15 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.yourapp.test.myrecordinschool.data.model.DropdownOptions
 import com.yourapp.test.myrecordinschool.data.model.Student
 import com.yourapp.test.myrecordinschool.data.preferences.AppPreferences
@@ -153,6 +163,16 @@ fun Settings02Screen(
 
 @Composable
 private fun StudentDataCard(student: Student) {
+    var profileImageUri by remember { mutableStateOf<Uri?>(null) }
+    var showDropdownMenu by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        profileImageUri = uri
+    }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -165,32 +185,148 @@ private fun StudentDataCard(student: Student) {
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Student Info Header
+            // Header with three dots menu
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Box {
+                    IconButton(
+                        onClick = { showDropdownMenu = true }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = "More options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
+                    DropdownMenu(
+                        expanded = showDropdownMenu,
+                        onDismissRequest = { showDropdownMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Change Profile Picture") },
+                            onClick = {
+                                showDropdownMenu = false
+                                imagePickerLauncher.launch("image/*")
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.PhotoCamera,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Remove Picture") },
+                            onClick = {
+                                showDropdownMenu = false
+                                profileImageUri = null
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                        Divider()
+                        DropdownMenuItem(
+                            text = { Text("Export Profile") },
+                            onClick = {
+                                showDropdownMenu = false
+                                // TODO: Implement export functionality
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.Share,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+            
+            // Student Info Header with Profile Picture
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Card(
-                    modifier = Modifier.size(64.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
-                    shape = RoundedCornerShape(32.dp)
+                // Profile Picture with Upload Functionality
+                Box(
+                    modifier = Modifier.size(80.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Person,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    if (profileImageUri != null) {
+                        AsyncImage(
+                            model = profileImageUri,
+                            contentDescription = "Profile Picture",
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(CircleShape)
+                                .border(
+                                    2.dp,
+                                    MaterialTheme.colorScheme.primary,
+                                    CircleShape
+                                )
+                                .clickable { imagePickerLauncher.launch("image/*") },
+                            contentScale = ContentScale.Crop
                         )
+                    } else {
+                        Card(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clickable { imagePickerLauncher.launch("image/*") },
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            shape = CircleShape
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(32.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Upload indicator
+                        Card(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .offset(x = 28.dp, y = 28.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            ),
+                            shape = CircleShape
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = "Upload Photo",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
                     }
                 }
                 
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = student.name,
                         style = MaterialTheme.typography.titleLarge,
@@ -202,6 +338,16 @@ private fun StudentDataCard(student: Student) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    
+                    // Upload hint
+                    if (profileImageUri == null) {
+                        Text(
+                            text = "Tap to upload photo",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
             }
             

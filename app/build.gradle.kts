@@ -79,6 +79,9 @@ dependencies {
     implementation("androidx.room:room-runtime:$room_version")
     kapt("androidx.room:room-compiler:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
+    
+    // Image Loading - Coil
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
     // Date Picker
    // implementation("androidx.compose.material3:material3-datetime:1.2.0-beta01")
