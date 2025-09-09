@@ -59,4 +59,19 @@ interface ViolationDao {
 
     @Query("SELECT * FROM violations WHERE student_id = :studentId AND local_changes = 1")
     suspend fun getPendingSyncViolations(studentId: String): List<ViolationEntity>
+    
+    // Pagination support for large datasets
+    @Query("SELECT * FROM violations WHERE student_id = :studentId ORDER BY date_recorded DESC LIMIT :limit OFFSET :offset")
+    suspend fun getViolationsPaginated(studentId: String, limit: Int, offset: Int): List<ViolationEntity>
+    
+    @Query("SELECT * FROM violations ORDER BY date_recorded DESC LIMIT :limit OFFSET :offset")
+    suspend fun getAllViolationsPaginated(limit: Int, offset: Int): List<ViolationEntity>
+    
+    // Get total count for pagination
+    @Query("SELECT COUNT(*) FROM violations WHERE student_id = :studentId")
+    suspend fun getTotalViolationCount(studentId: String): Int
+    
+    // Data cleanup for optimization
+    @Query("DELETE FROM violations WHERE student_id = :studentId AND date_recorded < :cutoffTimestamp")
+    suspend fun deleteOldViolations(studentId: String, cutoffTimestamp: Long)
 }

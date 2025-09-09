@@ -25,6 +25,11 @@ class AppPreferences(context: Context) {
         private const val KEY_LAST_VIOLATION_SYNC = "last_violation_sync"
         private const val KEY_LAST_ATTENDANCE_SYNC = "last_attendance_sync"
         private const val KEY_CACHE_TIMEOUT = "cache_timeout"
+        
+        // App usage and sync optimization keys
+        private const val KEY_SYNC_PAGE_SIZE = "sync_page_size"
+        private const val KEY_AUTO_CLEANUP_ENABLED = "auto_cleanup_enabled"
+        private const val KEY_LAST_CLEANUP_TIME = "last_cleanup_time"
     }
     
     // App Configuration
@@ -155,5 +160,42 @@ class AppPreferences(context: Context) {
             .remove(KEY_LAST_VIOLATION_SYNC)
             .remove(KEY_LAST_ATTENDANCE_SYNC)
             .apply()
+    }
+    
+    // App usage and sync optimization methods
+    fun setSyncPageSize(pageSize: Int) {
+        sharedPreferences.edit()
+            .putInt(KEY_SYNC_PAGE_SIZE, pageSize)
+            .apply()
+    }
+    
+    fun getSyncPageSize(): Int {
+        return sharedPreferences.getInt(KEY_SYNC_PAGE_SIZE, 50) // Default 50 items per page
+    }
+    
+    fun setAutoCleanupEnabled(enabled: Boolean) {
+        sharedPreferences.edit()
+            .putBoolean(KEY_AUTO_CLEANUP_ENABLED, enabled)
+            .apply()
+    }
+    
+    fun isAutoCleanupEnabled(): Boolean {
+        return sharedPreferences.getBoolean(KEY_AUTO_CLEANUP_ENABLED, true) // Default enabled
+    }
+    
+    fun setLastCleanupTime(timestamp: Long) {
+        sharedPreferences.edit()
+            .putLong(KEY_LAST_CLEANUP_TIME, timestamp)
+            .apply()
+    }
+    
+    fun getLastCleanupTime(): Long {
+        return sharedPreferences.getLong(KEY_LAST_CLEANUP_TIME, 0L)
+    }
+    
+    fun shouldPerformCleanup(): Boolean {
+        val lastCleanup = getLastCleanupTime()
+        val cleanupInterval = 7 * 24 * 60 * 60 * 1000L // 7 days
+        return (System.currentTimeMillis() - lastCleanup) > cleanupInterval
     }
 }

@@ -1,5 +1,6 @@
 package com.yourapp.test.myrecordinschool.ui.screen
 
+import android.app.Application
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +14,7 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -20,6 +22,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yourapp.test.myrecordinschool.roomdb.entity.ViolationEntity
 import com.yourapp.test.myrecordinschool.data.model.Violation
 import com.yourapp.test.myrecordinschool.data.model.*
+import com.yourapp.test.myrecordinschool.data.sync.SyncManager
 import com.yourapp.test.myrecordinschool.ui.theme.*
 import com.yourapp.test.myrecordinschool.ui.components.*
 import com.yourapp.test.myrecordinschool.viewmodel.AttendanceViewModel
@@ -37,6 +40,15 @@ fun HomeScreen(
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("My Violations", "My Attendance")
+    
+    // Get SyncManager instance for user interaction tracking
+    val context = LocalContext.current
+    val syncManager = remember { SyncManager(context.applicationContext as Application) }
+    
+    // Track user interactions
+    val trackUserInteraction = {
+        syncManager.notifyUserInteraction()
+    }
     
     // Sync status for both ViewModels
     val violationSyncStatus by violationViewModel.syncStatus.collectAsState()
@@ -75,6 +87,7 @@ fun HomeScreen(
                 // Refresh button
                 IconButton(
                     onClick = {
+                        trackUserInteraction() // Track user interaction
                         if (selectedTab == 0) {
                             violationViewModel.refreshViolations()
                         } else {
@@ -89,7 +102,10 @@ fun HomeScreen(
                     )
                 }
                 
-                IconButton(onClick = onNavigateToSettings) {
+                IconButton(onClick = {
+                    trackUserInteraction() // Track user interaction
+                    onNavigateToSettings()
+                }) {
                     Icon(
                         imageVector = Icons.Filled.Settings,
                         contentDescription = "Settings",
@@ -111,7 +127,10 @@ fun HomeScreen(
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
-                    onClick = { selectedTab = index },
+                    onClick = { 
+                        trackUserInteraction() // Track user interaction
+                        selectedTab = index 
+                    },
                     modifier = Modifier.padding(vertical = 16.dp)
                 ) {
                     Text(

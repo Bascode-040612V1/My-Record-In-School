@@ -51,4 +51,23 @@ interface AttendanceDao {
 
     @Query("SELECT * FROM attendance ORDER BY date DESC")
     fun getAllAttendance(): Flow<List<AttendanceEntity>>
+    
+    // Pagination support for large datasets
+    @Query("SELECT * FROM attendance WHERE student_id = :studentId ORDER BY date DESC LIMIT :limit OFFSET :offset")
+    suspend fun getAttendancePaginated(studentId: String, limit: Int, offset: Int): List<AttendanceEntity>
+    
+    @Query("SELECT * FROM attendance ORDER BY date DESC LIMIT :limit OFFSET :offset")
+    suspend fun getAllAttendancePaginated(limit: Int, offset: Int): List<AttendanceEntity>
+    
+    // Get total count for pagination
+    @Query("SELECT COUNT(*) FROM attendance WHERE student_id = :studentId")
+    suspend fun getTotalAttendanceCount(studentId: String): Int
+    
+    // Data cleanup for optimization
+    @Query("DELETE FROM attendance WHERE student_id = :studentId AND date < :cutoffDate")
+    suspend fun deleteOldAttendance(studentId: String, cutoffDate: String)
+    
+    // Monthly pagination
+    @Query("SELECT * FROM attendance WHERE student_id = :studentId AND date LIKE :yearMonth || '%' ORDER BY date DESC LIMIT :limit OFFSET :offset")
+    suspend fun getMonthlyAttendancePaginated(studentId: String, yearMonth: String, limit: Int, offset: Int): List<AttendanceEntity>
 }

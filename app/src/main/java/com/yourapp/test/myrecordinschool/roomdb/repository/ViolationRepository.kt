@@ -78,4 +78,30 @@ class ViolationRepository(private val violationDao: ViolationDao) {
     suspend fun getPendingSyncViolations(studentId: String): List<ViolationEntity> {
         return violationDao.getPendingSyncViolations(studentId)
     }
+    
+    // Pagination support for large datasets
+    suspend fun getViolationsPaginated(studentId: String, page: Int, pageSize: Int = 20): List<ViolationEntity> {
+        val offset = page * pageSize
+        return violationDao.getViolationsPaginated(studentId, pageSize, offset)
+    }
+    
+    suspend fun getAllViolationsPaginated(page: Int, pageSize: Int = 20): List<ViolationEntity> {
+        val offset = page * pageSize
+        return violationDao.getAllViolationsPaginated(pageSize, offset)
+    }
+    
+    suspend fun getTotalViolationCount(studentId: String): Int {
+        return violationDao.getTotalViolationCount(studentId)
+    }
+    
+    suspend fun getTotalPages(studentId: String, pageSize: Int = 20): Int {
+        val totalCount = getTotalViolationCount(studentId)
+        return (totalCount + pageSize - 1) / pageSize // Ceiling division
+    }
+    
+    // Data cleanup for optimization
+    suspend fun cleanupOldViolations(studentId: String, daysToKeep: Int = 90) {
+        val cutoffTimestamp = System.currentTimeMillis() - (daysToKeep * 24 * 60 * 60 * 1000L)
+        violationDao.deleteOldViolations(studentId, cutoffTimestamp)
+    }
 }

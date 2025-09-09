@@ -77,4 +77,35 @@ class AttendanceRepository(private val attendanceDao: AttendanceDao) {
         val lateCount = attendanceDao.getLateCount(studentId)
         return AttendanceStats.calculate(presentCount, absentCount, lateCount)
     }
+    
+    // Pagination support for large datasets
+    suspend fun getAttendancePaginated(studentId: String, page: Int, pageSize: Int = 30): List<AttendanceEntity> {
+        val offset = page * pageSize
+        return attendanceDao.getAttendancePaginated(studentId, pageSize, offset)
+    }
+    
+    suspend fun getAllAttendancePaginated(page: Int, pageSize: Int = 30): List<AttendanceEntity> {
+        val offset = page * pageSize
+        return attendanceDao.getAllAttendancePaginated(pageSize, offset)
+    }
+    
+    suspend fun getMonthlyAttendancePaginated(studentId: String, yearMonth: String, page: Int, pageSize: Int = 31): List<AttendanceEntity> {
+        val offset = page * pageSize
+        return attendanceDao.getMonthlyAttendancePaginated(studentId, yearMonth, pageSize, offset)
+    }
+    
+    suspend fun getTotalAttendanceCount(studentId: String): Int {
+        return attendanceDao.getTotalAttendanceCount(studentId)
+    }
+    
+    suspend fun getTotalPages(studentId: String, pageSize: Int = 30): Int {
+        val totalCount = getTotalAttendanceCount(studentId)
+        return (totalCount + pageSize - 1) / pageSize // Ceiling division
+    }
+    
+    // Data cleanup for optimization
+    suspend fun cleanupOldAttendance(studentId: String, daysToKeep: Int = 180) {
+        val cutoffDate = java.time.LocalDate.now().minusDays(daysToKeep.toLong()).toString()
+        attendanceDao.deleteOldAttendance(studentId, cutoffDate)
+    }
 }
