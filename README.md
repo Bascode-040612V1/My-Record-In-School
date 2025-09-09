@@ -1,4 +1,4 @@
-# My Record in School App
+# My Record in School App 
 
 A modern Android application built with Jetpack Compose that allows students to track their school violations and attendance records.
 
@@ -12,7 +12,7 @@ A modern Android application built with Jetpack Compose that allows students to 
 ### 📱 Main Features
 
 #### 🚨 Violation Tracking
-- View violation history with detailed information
+- View violation history with detailed information,
 - Color-coded offense indicators (Green: 1st offense, Orange: 2nd offense, Red: 3rd+ offense)
 - Acknowledge violations by viewing details
 - Categorized violations:
